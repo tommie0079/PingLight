@@ -6,18 +6,20 @@
         red    = no reply
         grey   = checking / first ping pending
 
-    You can edit the hostname directly in the widget: click the text,
-    type a new host, and press Enter.
+    You can edit the display name directly in the widget: click the text,
+    type a new name, and press Enter. The name is just a label; it does not
+    change which host is pinged.
 
     Move it:   click-and-drag the circle.
     Close it:  right-click -> Close.
 
-    Run it with a hostname:
-        powershell -ExecutionPolicy Bypass -STA -File PingLight.ps1 -HostName server01
+    Run it with a hostname (and optional friendly name):
+        powershell -ExecutionPolicy Bypass -STA -File PingLight.ps1 -HostName server01 -Name "Web Server"
 #>
 
 param(
     [string]$HostName = "google.com",
+    [string]$Name = "",
     [int]$IntervalSeconds = 2,
     [int]$TimeoutMs = 1000
 )
@@ -54,6 +56,7 @@ public class Win32Snap {
 
 # --- Shared state ---------------------------------------------------------
 $script:hostname  = $HostName
+$script:label     = if ($Name.Trim() -ne '') { $Name.Trim() } else { $HostName }
 $script:timeoutMs = $TimeoutMs
 $script:ping      = New-Object System.Net.NetworkInformation.Ping
 $script:task      = $null
@@ -92,7 +95,8 @@ $reader  = New-Object System.Xml.XmlNodeReader $xaml
 $window  = [Windows.Markup.XamlReader]::Load($reader)
 $circle  = $window.FindName('Circle')
 $hostBox = $window.FindName('HostBox')
-$hostBox.Text = $script:hostname
+$hostBox.Text = $script:label
+$hostBox.ToolTip = "Pinging: $($script:hostname)"
 
 # --- Colors ---------------------------------------------------------------
 $brushUp       = New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.Color]::FromRgb(46, 204, 64))
@@ -180,14 +184,13 @@ $closeItem.Add_Click({ $window.Close() })
 $menu.Items.Add($closeItem) | Out-Null
 $window.ContextMenu = $menu
 
-# --- Commit hostname edits ------------------------------------------------
+# --- Commit display-name edits --------------------------------------------
 $commit = {
     $new = $hostBox.Text.Trim()
-    if ($new -ne '' -and $new -ne $script:hostname) {
-        $script:hostname = $new
-        $script:task = $null
-        Set-Light 'checking'
+    if ($new -ne '' -and $new -ne $script:label) {
+        $script:label = $new
     }
+    $hostBox.Text = $script:label
 }
 
 $hostBox.Add_KeyDown({
