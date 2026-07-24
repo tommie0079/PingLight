@@ -1,79 +1,119 @@
-# 🟢🔴 PingLight
+# PingLight
 
-A tiny desktop widget that stares at a host and judges it silently.
+PingLight is a lightweight, always-on-top desktop widget for Windows that
+continuously pings a host and shows its status as a colored circle.
 
-Green circle = "we're friends, it answered my ping." 🟢
-Red circle = "it's ghosting me." 🔴
-Grey circle = "hang on, I'm thinking..." ⚪
+| Color | Meaning |
+|-------|---------|
+| 🟢 Green | The host replied to the last ping. |
+| 🔴 Red | The host did not reply. |
+| ⚪ Grey | Checking, or the first ping is still pending. |
 
-That's it. That's the app.
-
-![It's a circle. With feelings.](https://img.shields.io/badge/dependencies-absolutely%20none-brightgreen) ![Made with](https://img.shields.io/badge/made%20with-PowerShell%20%26%20spite-blue)
-
-## Why does this exist?
-
-Because opening a terminal and typing `ping server01 -t` like a caveman is *so* 1998. Now you get a floating circle that lives on top of everything and never lets you forget that the printer is offline again.
+It has no external dependencies and runs entirely on the PowerShell and WPF
+components already included with Windows.
 
 ## Features
 
-- 🟢 **Always on top** — it will not be ignored.
-- ✏️ **Editable hostname** — click the text, type, press Enter. It re-pings instantly.
-- 🧲 **Snaps to screen edges & corners** — for the tidy people.
-- 🧲 **Snaps to other PingLights** — build a little wall of judgment.
-- 🖱️ **Drag it anywhere** — click the circle and fling it around.
-- ❌ **Right-click → Close** — when you can't handle the truth anymore.
-- 📦 **Zero dependencies** — no Python, no Node, no 400MB Electron sadness. Just Windows being Windows.
+- **Always on top** — stays above other windows and re-asserts itself when
+  another application opens, so it is not pushed to the back.
+- **No console window** — launched through a small VBScript wrapper, so no
+  PowerShell window ever appears.
+- **Editable label** — click the text, type a new name, and press Enter. The
+  label is display-only and does not change which host is pinged.
+- **Edge and corner snapping** — the window snaps to screen edges and corners.
+- **Widget snapping** — multiple PingLights snap to one another to form a tidy
+  status bar.
+- **Draggable** — click and drag the circle to reposition it.
+- **Resizable** — scale the entire widget up or down (see [Resizing](#resizing)).
+- **Resilient** — transient ping, display, and UI errors are caught and logged
+  instead of closing the widget.
+- **Logging** — startup, shutdown, and errors are written to a per-host log file
+  for troubleshooting.
+- **Zero dependencies** — no additional runtimes to install.
 
 ## Requirements
 
-- Windows.
-- ...that's it. It uses the PowerShell and WPF that are already sitting on your machine gathering dust.
+- Windows with PowerShell (included by default).
 
-## Usage
+## Getting started
 
-1. Open `Start-PingLight.bat` in Notepad.
-2. Change this line to whatever you want to monitor:
+1. Open `Start-PingLight.bat` in a text editor.
+2. Set the host and optional display name:
    ```bat
-   set "HOSTNAME=google.com"
+   set "HOSTNAME=192.168.1.2"
+   set "NAME=Web Server"
    ```
-3. Double-click `Start-PingLight.bat`.
-4. Enjoy your new emotionally expressive circle.
+   Leave `NAME` empty to display the hostname instead.
+3. Double-click `Start-PingLight.bat` to launch the widget.
 
-Prefer the command line? Sure, show-off:
+`Start-PingLight.bat` launches the widget through `launch-hidden.vbs`, which
+starts PowerShell with no visible window. Keep `launch-hidden.vbs` and
+`PingLight.ps1` in the same folder as the `.bat` file.
+
+To run it directly from PowerShell:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -STA -File PingLight.ps1 -HostName server01
+powershell -ExecutionPolicy Bypass -STA -File PingLight.ps1 -HostName server01 -Name "Web Server"
 ```
 
-## Running several
+## Running multiple widgets
 
-You wanted many. You can have many.
+- **Ad hoc:** launch one widget, then click the label and edit it as needed.
+- **Persistent:** copy `Start-PingLight.bat` (for example
+  `Start-Server01.bat`, `Start-Router.bat`), set a different `HOSTNAME` in each,
+  and launch them. They snap together into a single status panel.
 
-- **The lazy way:** launch one, then click the hostname and edit it. Repeat.
-- **The organized way:** copy `Start-PingLight.bat` a few times (`Start-Server01.bat`, `Start-Router.bat`, `Start-ThatOnePrinter.bat`), set a different `HOSTNAME` in each, and double-click them all. They'll snap together into a neat little status bar of doom.
+## Resizing
 
-## Tweaking
+The whole widget — circle and label — scales together, between 0.5× and 3×.
 
-Everything lives in `PingLight.ps1`:
+- **Ctrl + mouse wheel** over the widget to resize it live.
+- **Right-click → Bigger / Smaller / Reset size**.
+- **`-Scale` parameter** to set the initial size, for example:
+  ```bat
+  start "" powershell.exe -NoProfile -ExecutionPolicy Bypass -STA -WindowStyle Hidden -File "%~dp0PingLight.ps1" -HostName "%HOSTNAME%" -Name "%NAME%" -Scale "1.5"
+  ```
 
-| What | Where | Default |
-|------|-------|---------|
+## Configuration
+
+Options are exposed as parameters on `PingLight.ps1`:
+
+| Setting | Parameter / Location | Default |
+|---------|----------------------|---------|
+| Host to ping | `-HostName` | `google.com` |
+| Display label | `-Name` | Hostname |
 | Ping interval | `-IntervalSeconds` | 2 seconds |
 | Ping timeout | `-TimeoutMs` | 1000 ms |
+| Initial scale | `-Scale` | 1.0 |
 | Snap distance | `$script:snap` | 25 px |
-| Circle size | `Ellipse Width/Height` in the XAML | 64 |
 
-## FAQ
+## Logging and troubleshooting
 
-**Q: Does it need admin rights?**
-A: Nope. It pings using the polite .NET method, not the raw-socket "I am root now" method.
+Each widget writes to a log file named `PingLight_<host>.log` in a `logs`
+folder next to the script (falling back to `%TEMP%` if that folder cannot be
+created).
 
-**Q: It says red but the server is fine!**
-A: Some hosts block ICMP (ping) on purpose. The circle only knows what the ping tells it. Don't shoot the messenger circle.
+If the widget disappears, the end of the log indicates the cause:
 
-**Q: Can I make it green permanently to fool my boss?**
-A: This README does not condone that. (Line 3 of the ping loop, but you didn't hear it from me.)
+- Ends with `Window closed.` / `Widget stopped.` — closed intentionally.
+- Ends with an `ERROR` or `FATAL` entry — an application error occurred.
+- Stops abruptly with no closing entry — the process was terminated externally
+  (for example by security software, group policy, or system sleep).
+
+## Frequently asked questions
+
+**Does it require administrator rights?**
+No. It uses the managed .NET ping API, which does not require elevation.
+
+**The circle is red but the host is reachable.**
+Some hosts and firewalls block ICMP (ping) traffic. The status reflects only
+whether a ping reply was received.
+
+**Another window still covered the widget.**
+The widget re-asserts itself above normal windows automatically. A true
+exclusive full-screen application (such as some games or full-screen video)
+can still cover any always-on-top window; this is a Windows limitation.
 
 ## License
 
-Do whatever you want with it. If it saves your day, a green circle salutes you. 🟢
+Provided as-is. You are free to use and modify it.
