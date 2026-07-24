@@ -8,7 +8,8 @@ rem  Double-click this file to launch the widget.
 rem  Copy this .bat and change the values to run several at once.
 rem =========================================================
 
-set "HOSTNAME=192.168.1.2"
-set "NAME=SSP Hyper -v"
+set "HOSTNAME=192.168.x.x"
+set "NAME=Enter_name"
 
-start "" powershell.exe -NoProfile -ExecutionPolicy Bypass -STA -WindowStyle Hidden -File "%~dp0PingLight.ps1" -HostName "%HOSTNAME%" -Name "%NAME%"
+rem  Launch through wscript so no PowerShell window ever appears.
+start "" wscript.exe "%~dp0launch-hidden.vbs" "%HOSTNAME%" "%NAME%"
