@@ -11,6 +11,9 @@
     change which host is pinged.
 
     Move it:   click-and-drag the circle.
+    Resize it: drag the grip in the bottom-right corner. Ctrl + mouse wheel
+               and right-click -> Bigger / Smaller still work; double-click
+               the grip to go back to the default size.
     Close it:  right-click -> Close.
 
     Run it with a hostname (and optional friendly name):
@@ -113,20 +116,38 @@ $script:snap      = 25   # snap distance in DIPs
         ShowInTaskbar="False"
         SizeToContent="WidthAndHeight"
         WindowStartupLocation="CenterScreen">
-    <Border CornerRadius="14" Background="#DD1E1E1E" Padding="14">
+    <Border x:Name="Root" CornerRadius="14" Background="#DD1E1E1E" Padding="14">
         <Border.LayoutTransform>
             <ScaleTransform x:Name="Scaler" ScaleX="1" ScaleY="1"/>
         </Border.LayoutTransform>
-        <StackPanel>
-            <Ellipse x:Name="Circle" Width="64" Height="64"
-                     Fill="#AAAAAA" Stroke="#33FFFFFF" StrokeThickness="1"
-                     HorizontalAlignment="Center"/>
-            <TextBox x:Name="HostBox"
-                     Background="Transparent" Foreground="White"
-                     BorderThickness="0" TextAlignment="Center"
-                     FontSize="13" Width="150" Margin="0,10,0,0"
-                     CaretBrush="White"/>
-        </StackPanel>
+        <Grid>
+            <StackPanel>
+                <Ellipse x:Name="Circle" Width="64" Height="64"
+                         Fill="#AAAAAA" Stroke="#33FFFFFF" StrokeThickness="1"
+                         HorizontalAlignment="Center"/>
+                <TextBox x:Name="HostBox"
+                         Background="Transparent" Foreground="White"
+                         BorderThickness="0" TextAlignment="Center"
+                         FontSize="13" Width="150" Margin="0,10,0,0"
+                         CaretBrush="White"/>
+            </StackPanel>
+            <!-- Resize grip. Negative margin tucks it into the Border's
+                 padding; the counter-ScaleTransform keeps it grabbable at
+                 every widget size. -->
+            <Border x:Name="Grip" Width="12" Height="12"
+                    HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                    Margin="0,0,-6,-6" Background="Transparent"
+                    Cursor="SizeNWSE" Opacity="0.35"
+                    ToolTip="Drag to resize (double-click to reset)"
+                    RenderTransformOrigin="1,1">
+                <Border.RenderTransform>
+                    <ScaleTransform x:Name="GripScaler" ScaleX="1" ScaleY="1"/>
+                </Border.RenderTransform>
+                <Path Stroke="White" StrokeThickness="1.4"
+                      StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                      Data="M 11,2 L 2,11 M 11,7 L 7,11"/>
+            </Border>
+        </Grid>
     </Border>
 </Window>
 "@
@@ -136,13 +157,16 @@ $window  = [Windows.Markup.XamlReader]::Load($reader)
 $circle  = $window.FindName('Circle')
 $hostBox = $window.FindName('HostBox')
 $scaler  = $window.FindName('Scaler')
+$root    = $window.FindName('Root')
+$grip    = $window.FindName('Grip')
+$gripScaler = $window.FindName('GripScaler')
 $hostBox.Text = $script:label
 $hostBox.ToolTip = "Pinging: $($script:hostname)"
 
 # --- Scaling (make the whole widget smaller/bigger) -----------------------
 # The ScaleTransform sits on the root Border, so the circle AND the text
 # scale together and the window resizes to fit.
-$script:scaleMin = 0.5
+$script:scaleMin = 0.3
 $script:scaleMax = 3.0
 $script:scale    = 1.0
 
@@ -151,6 +175,11 @@ function Set-Scale([double]$value) {
     $script:scale = $v
     $scaler.ScaleX = $v
     $scaler.ScaleY = $v
+    # Counter-scale the grip so it stays roughly the same size on screen,
+    # clamped so it never dwarfs a tiny widget.
+    $inv = [math]::Min(2.5, [math]::Max(0.6, 1.0 / $v))
+    $gripScaler.ScaleX = $inv
+    $gripScaler.ScaleY = $inv
 }
 
 Set-Scale $Scale
@@ -168,11 +197,11 @@ function Set-Light([string]$state) {
     }
 }
 
-# --- Dragging (but not when clicking the editable hostname) ---------------
-function Test-InHost($src) {
+# --- Dragging (but not on the editable hostname or the resize grip) -------
+function Test-InElement($src, $target) {
     $d = $src
     while ($null -ne $d) {
-        if ($d -eq $hostBox) { return $true }
+        if ($d -eq $target) { return $true }
         try { $d = [System.Windows.Media.VisualTreeHelper]::GetParent($d) } catch { break }
     }
     return $false
@@ -228,7 +257,8 @@ function Invoke-Snap {
 
 $window.Add_MouseLeftButtonDown({
     try {
-        if (-not (Test-InHost $_.OriginalSource)) {
+        if (-not (Test-InElement $_.OriginalSource $hostBox) -and
+            -not (Test-InElement $_.OriginalSource $grip)) {
             $window.DragMove()
             Invoke-Snap
         }
@@ -236,6 +266,72 @@ $window.Add_MouseLeftButtonDown({
         Write-Log ("Drag/snap error: " + $_.Exception.Message) 'ERROR'
     }
 })
+
+# --- Drag the corner grip to resize --------------------------------------
+# The grip sits inside the scaled Border, so we work in window coordinates
+# (DIPs measured from the window's top-left, which the ScaleTransform does not
+# touch) and turn the cursor's distance from that corner into a scale factor.
+# The window's Left/Top stay put while SizeToContent grows it down and right,
+# so the widget follows the cursor.
+$script:resizing    = $false
+$script:resizeBaseW = 1.0
+$script:resizeBaseH = 1.0
+$script:resizeOffX  = 0.0
+$script:resizeOffY  = 0.0
+
+$stopResize = {
+    if ($script:resizing) {
+        $script:resizing = $false
+        try { $grip.ReleaseMouseCapture() } catch { }
+        $grip.Opacity = 0.35
+        try { Invoke-Snap } catch { }
+    }
+}
+
+$grip.Add_MouseEnter({ $grip.Opacity = 0.9 })
+$grip.Add_MouseLeave({ if (-not $script:resizing) { $grip.Opacity = 0.35 } })
+
+$grip.Add_MouseLeftButtonDown({
+    try {
+        $_.Handled = $true
+        if ($_.ClickCount -ge 2) { Set-Scale 1.0; return }
+
+        # Border.ActualWidth/Height are the unscaled layout size, so the
+        # window measures baseSize * scale on screen.
+        $script:resizeBaseW = [math]::Max(1.0, $root.ActualWidth)
+        $script:resizeBaseH = [math]::Max(1.0, $root.ActualHeight)
+
+        # Remember where the cursor grabbed relative to the current corner so
+        # the widget does not jump on the first pixel of movement.
+        $p = $_.GetPosition($window)
+        $script:resizeOffX = $p.X - ($script:resizeBaseW * $script:scale)
+        $script:resizeOffY = $p.Y - ($script:resizeBaseH * $script:scale)
+
+        $script:resizing = $true
+        $grip.Opacity = 0.9
+        $grip.CaptureMouse() | Out-Null
+    } catch {
+        Write-Log ("Resize start error: " + $_.Exception.Message) 'ERROR'
+    }
+})
+
+$grip.Add_MouseMove({
+    if (-not $script:resizing) { return }
+    try {
+        $p  = $_.GetPosition($window)
+        $sx = ($p.X - $script:resizeOffX) / $script:resizeBaseW
+        $sy = ($p.Y - $script:resizeOffY) / $script:resizeBaseH
+        # Whichever axis the cursor pulls hardest wins, so the corner keeps up
+        # with the pointer instead of lagging on the shorter side.
+        Set-Scale ([math]::Max($sx, $sy))
+        $_.Handled = $true
+    } catch {
+        Write-Log ("Resize drag error: " + $_.Exception.Message) 'ERROR'
+    }
+})
+
+$grip.Add_MouseLeftButtonUp({ & $stopResize; $_.Handled = $true })
+$grip.Add_LostMouseCapture({ & $stopResize })
 
 # --- Right-click menu to close -------------------------------------------
 $menu = New-Object System.Windows.Controls.ContextMenu

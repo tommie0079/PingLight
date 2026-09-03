@@ -24,7 +24,8 @@ components already included with Windows.
 - **Widget snapping** — multiple PingLights snap to one another to form a tidy
   status bar.
 - **Draggable** — click and drag the circle to reposition it.
-- **Resizable** — scale the entire widget up or down (see [Resizing](#resizing)).
+- **Drag to resize** — grab the grip in the bottom-right corner and drag to
+  size the widget in one motion (see [Resizing](#resizing)).
 - **Resilient** — transient ping, display, and UI errors are caught and logged
   instead of closing the widget.
 - **Logging** — startup, shutdown, and errors are written to a per-host log file
@@ -65,8 +66,12 @@ powershell -ExecutionPolicy Bypass -STA -File PingLight.ps1 -HostName server01 -
 
 ## Resizing
 
-The whole widget — circle and label — scales together, between 0.5× and 3×.
+The whole widget — circle and label — scales together, between 0.3× and 3×.
 
+- **Drag the corner grip** — the small handle in the bottom-right corner. Drag
+  away from the widget to grow it, toward it to shrink it. The top-left corner
+  stays put, and the widget re-snaps to its neighbours when you let go.
+  **Double-click the grip** to return to the default size.
 - **Ctrl + mouse wheel** over the widget to resize it live.
 - **Right-click → Bigger / Smaller / Reset size**.
 - **`-Scale` parameter** to set the initial size, for example:
